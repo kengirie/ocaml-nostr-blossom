@@ -1,0 +1,4 @@
+(executable
+ (public_name ocaml-nostr-blossom)
+ (name main)
+ (libraries ocaml-nostr-blossom.shell eio_main))

@@ -1,0 +1,4 @@
+(library
+ (name blossom_shell)
+ (public_name ocaml-nostr-blossom.shell)
+ (libraries ocaml-nostr-blossom.core piaf eio eio_main))
