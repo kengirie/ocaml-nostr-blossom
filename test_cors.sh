@@ -25,6 +25,10 @@ else
     echo "Upload failed, cannot test GET CORS"
 fi
 
+echo "Testing Error Responses (X-Reason)..."
+# Invalid path
+curl -v http://localhost:8082/invalidpath 2>&1 | grep "X-Reason: Invalid path or hash"
+
 # Cleanup
 kill $SERVER_PID
 rm test_file.txt

@@ -15,6 +15,12 @@ OCaml 5 (Eio) と Piaf を用いた Nostr Blossom サーバーの実装計画で
 - Use `Bip340.verify` for signature verification.
 - Parse and validate Authorization header.
 
+#### [MODIFY] [auth.ml](file:///Users/iriekengo/ocaml-nostr-blossom/ocaml-nostr-blossom/lib/core/auth.ml)
+- **Spec Compliance:**
+    - Update `validate_auth` and `validate_event_structure` to accept optional `blob_sha256`.
+    - Implement `x` tag validation: if `blob_sha256` is provided, ensure it exists in `x` tags.
+    - Ensure `content` is not empty (basic check for human-readable string).
+
 #### [MODIFY] [dune](file:///Users/iriekengo/ocaml-nostr-blossom/ocaml-nostr-blossom/lib/core/dune)
 - Add dependencies: `ctypes`, `ctypes.foreign`, `digestif`, `yojson`, `base64`.
 

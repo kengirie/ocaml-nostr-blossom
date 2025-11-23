@@ -19,6 +19,10 @@ let handle_cors_preflight () =
   ] in
   Response.create ~headers `No_content
 
+let error_response status message =
+  let headers = Headers.of_list [("X-Reason", message)] in
+  Response.of_string ~headers ~body:message status
+
 let request_handler ~storage_dir { Server.Handler.request; _ } =
   Printf.printf "Request: %s %s\n%!" (Method.to_string request.meth) request.target;
   let response = match request.meth, request.target with
@@ -35,14 +39,14 @@ let request_handler ~storage_dir { Server.Handler.request; _ } =
                 Response.of_string ~body:data `OK
             | Error (Domain.Blob_not_found _) ->
                 Printf.printf "Blob not found\n%!";
-                Response.of_string ~body:"Not found" `Not_found
+                error_response `Not_found "Blob not found"
             | Error (Domain.Storage_error msg) ->
                 Printf.printf "Storage error: %s\n%!" msg;
-                Response.of_string ~body:msg `Internal_server_error
-            | Error _ -> Response.of_string ~body:"Internal error" `Internal_server_error)
+                error_response `Internal_server_error msg
+            | Error _ -> error_response `Internal_server_error "Internal error")
        | _ ->
            Printf.printf "Invalid path or hash\n%!";
-           Response.of_string ~body:"Not found" `Not_found)
+           error_response `Not_found "Invalid path or hash")
   | `PUT, "/upload" ->
       Printf.printf "Upload request\n%!";
       let content_type = Headers.get request.headers "content-type" |> Option.value ~default:"application/octet-stream" in
@@ -58,19 +62,23 @@ let request_handler ~storage_dir { Server.Handler.request; _ } =
       let policy = Policy.default_policy in
       (match Policy.check_upload_policy ~policy ~size:content_length ~mime:content_type with
        | Error e ->
-           Printf.printf "Policy check failed: %s\n%!" (match e with
-             | Domain.Storage_error msg -> msg
+           let msg = match e with
+             | Domain.Storage_error m -> m
              | Domain.Invalid_size s -> Printf.sprintf "Invalid size: %d" s
-             | _ -> "Unknown error");
-           Response.of_string ~body:"Upload rejected" `Bad_request
+             | _ -> "Unknown error"
+           in
+           Printf.printf "Policy check failed: %s\n%!" msg;
+           error_response `Bad_request msg
        | Ok () ->
            (* ストリーミング保存 + ハッシュ計算 *)
            (match Local_storage.save_stream ~dir:storage_dir ~body:request.body with
             | Error e ->
-                Printf.printf "Save failed: %s\n%!" (match e with
-                  | Domain.Storage_error msg -> msg
-                  | _ -> "Unknown error");
-                Response.of_string ~body:"Upload failed" `Internal_server_error
+                let msg = match e with
+                  | Domain.Storage_error m -> m
+                  | _ -> "Unknown error"
+                in
+                Printf.printf "Save failed: %s\n%!" msg;
+                error_response `Internal_server_error msg
             | Ok (hash, size) ->
                 Printf.printf "Upload successful: %s (%d bytes)\n%!" hash size;
                 let descriptor = {
@@ -85,7 +93,7 @@ let request_handler ~storage_dir { Server.Handler.request; _ } =
                   descriptor.url descriptor.sha256 descriptor.size descriptor.mime_type descriptor.uploaded
                 in
                 Response.of_string ~body:json `OK))
-  | _ -> Response.of_string ~body:"Not found" `Not_found
+  | _ -> error_response `Not_found "Not found"
   in
   add_cors_headers response
 
