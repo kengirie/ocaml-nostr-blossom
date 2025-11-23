@@ -1,5 +1,3 @@
-(* NIP-98 HTTP Authentication for Nostr *)
-
 (* Nostr event type for kind 24242 *)
 type nostr_event = {
   id : string;

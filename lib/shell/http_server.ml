@@ -1,9 +1,28 @@
 open Piaf
 open Blossom_core
 
+let add_cors_headers response =
+  let headers = Response.headers response in
+  let headers = Headers.add headers "Access-Control-Allow-Origin" "*" in
+  Response.create
+    ~version:response.version
+    ~headers
+    ~body:response.body
+    response.status
+
+let handle_cors_preflight () =
+  let headers = Headers.of_list [
+    ("Access-Control-Allow-Origin", "*");
+    ("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE, OPTIONS");
+    ("Access-Control-Allow-Headers", "Authorization, Content-Type, Content-Length, *");
+    ("Access-Control-Max-Age", "86400");
+  ] in
+  Response.create ~headers `No_content
+
 let request_handler ~storage_dir { Server.Handler.request; _ } =
   Printf.printf "Request: %s %s\n%!" (Method.to_string request.meth) request.target;
-  match request.meth, request.target with
+  let response = match request.meth, request.target with
+  | `OPTIONS, _ -> handle_cors_preflight ()
   | `GET, path ->
       let path_parts = String.split_on_char '/' path |> List.filter (fun s -> s <> "") in
       Printf.printf "Path parts: [%s]\n%!" (String.concat "; " path_parts);
@@ -67,6 +86,8 @@ let request_handler ~storage_dir { Server.Handler.request; _ } =
                 in
                 Response.of_string ~body:json `OK))
   | _ -> Response.of_string ~body:"Not found" `Not_found
+  in
+  add_cors_headers response
 
 let start ~sw ~env ~port =
   let storage_dir = Eio.Path.(Eio.Stdenv.cwd env / "data") in
