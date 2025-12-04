@@ -1,4 +1,4 @@
 (library
  (name blossom_core)
  (public_name ocaml-nostr-blossom.core)
- (libraries ctypes ctypes.foreign digestif yojson base64 secp256k1-internal))
+ (libraries ctypes ctypes.foreign digestif yojson base64 secp256k1-internal conan conan.string conan-database.light))

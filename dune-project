@@ -19,7 +19,7 @@
  (name ocaml-nostr-blossom)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml piaf eio eio_main digestif checkseum alcotest)
+ (depends ocaml piaf eio eio_main digestif checkseum alcotest conan conan-database)
  (tags
   ("add topics" "to describe" your project)))
 

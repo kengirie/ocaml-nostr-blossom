@@ -32,11 +32,21 @@ let save_stream ~dir ~db ~body ~mime_type ~uploader =
       let size = String.length data in
       let path = Eio.Path.(dir / hash) in
 
+      (* MIME type がデフォルト値の場合、magic bytes 検出を試みる *)
+      let final_mime_type =
+        if mime_type = "application/octet-stream" then
+          match Mime_detect.detect_from_bytes data with
+          | Some detected -> detected
+          | None -> mime_type
+        else
+          mime_type
+      in
+
       (try
         Eio.Path.save ~create:(`Or_truncate 0o644) path data;
         (* DBにメタデータを保存 *)
-        match Blossom_db.save db ~sha256:hash ~size ~mime_type ~uploader with
-        | Ok () -> Ok (hash, size)
+        match Blossom_db.save db ~sha256:hash ~size ~mime_type:final_mime_type ~uploader with
+        | Ok () -> Ok (hash, size, final_mime_type)
         | Error e -> Error e
       with exn ->
         Error (Domain.Storage_error (Printexc.to_string exn)))

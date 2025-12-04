@@ -1,4 +1,4 @@
 (test
  (name test_runner)
- (modules test_runner test_integrity test_policy test_auth test_bip340 test_http_response)
+ (modules test_runner test_integrity test_policy test_auth test_bip340 test_http_response test_mime_detect)
  (libraries ocaml-nostr-blossom.core ocaml-nostr-blossom.shell alcotest base64))

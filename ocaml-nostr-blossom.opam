@@ -18,6 +18,8 @@ depends: [
   "digestif"
   "checkseum"
   "alcotest"
+  "conan"
+  "conan-database"
   "odoc" {with-doc}
 ]
 build: [

@@ -104,13 +104,13 @@ let request_handler ~clock ~dir ~db { Server.Handler.request; _ } =
                          in
                          Eio.traceln "Save failed: %s" msg;
                          Http_response.Error_internal msg
-                     | Ok (hash, size) ->
-                         Eio.traceln "Upload successful: %s (%d bytes)" hash size;
+                     | Ok (hash, size, detected_mime_type) ->
+                         Eio.traceln "Upload successful: %s (%d bytes, %s)" hash size detected_mime_type;
                          let descriptor = {
                            Domain.url = Printf.sprintf "http://localhost:8082/%s" hash;
                            sha256 = hash;
                            size = size;
-                           mime_type = mime_type;
+                           mime_type = detected_mime_type;
                            uploaded = Int64.of_float (Eio.Time.now clock);
                          } in
                          Eio.traceln "Upload response: %s" (Http_response.descriptor_to_json descriptor);
