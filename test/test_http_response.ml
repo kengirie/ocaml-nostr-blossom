@@ -10,6 +10,14 @@ let get_header response name =
 let get_status response =
   Response.status response |> Status.to_code
 
+(* CORSヘッダーの検証ヘルパー *)
+let check_cors_headers response =
+  check (option string) "CORS origin" (Some "*") (get_header response "access-control-allow-origin");
+  check (option string) "CORS methods" (Some "*") (get_header response "access-control-allow-methods");
+  check (option string) "CORS headers" (Some "Authorization, Content-Type, Content-Length, *") (get_header response "access-control-allow-headers");
+  check (option string) "CORS expose-headers" (Some "*") (get_header response "access-control-expose-headers");
+  check (option string) "CORS max-age" (Some "86400") (get_header response "access-control-max-age")
+
 (* Success_blob レスポンステスト *)
 let test_success_blob () =
   let response = Http_response.create (Success_blob {
@@ -19,7 +27,8 @@ let test_success_blob () =
   }) in
   check (option string) "Content-Type header" (Some "text/plain") (get_header response "content-type");
   check (option string) "Content-Length header" (Some "9") (get_header response "content-length");
-  check int "Status code" 200 (get_status response)
+  check int "Status code" 200 (get_status response);
+  check_cors_headers response
 
 (* Success_metadata レスポンステスト *)
 let test_success_metadata () =
@@ -29,7 +38,8 @@ let test_success_metadata () =
   }) in
   check (option string) "Content-Type header" (Some "image/png") (get_header response "content-type");
   check (option string) "Content-Length header" (Some "1024") (get_header response "content-length");
-  check int "Status code" 200 (get_status response)
+  check int "Status code" 200 (get_status response);
+  check_cors_headers response
 
 (* Success_upload レスポンステスト *)
 let test_success_upload () =
@@ -41,52 +51,42 @@ let test_success_upload () =
     uploaded = 1234567890L;
   } in
   let response = Http_response.create (Success_upload descriptor) in
-  check int "Status code" 200 (get_status response)
+  check int "Status code" 200 (get_status response);
+  check_cors_headers response
 
 (* Cors_preflight レスポンステスト *)
 let test_cors_preflight () =
   let response = Http_response.create Cors_preflight in
   check int "Status code" 204 (get_status response);
-  check (option string) "CORS origin" (Some "*") (get_header response "access-control-allow-origin");
-  check (option string) "CORS methods" (Some "*") (get_header response "access-control-allow-methods");
-  check (option string) "CORS headers" (Some "Authorization, Content-Type, Content-Length, *") (get_header response "access-control-allow-headers");
-  check (option string) "CORS expose-headers" (Some "*") (get_header response "access-control-expose-headers");
-  check (option string) "CORS max-age" (Some "86400") (get_header response "access-control-max-age")
+  check_cors_headers response
 
 (* Error_not_found レスポンステスト *)
 let test_error_not_found () =
   let response = Http_response.create (Error_not_found "Resource not found") in
   check int "Status code" 404 (get_status response);
-  check (option string) "X-Reason header" (Some "Resource not found") (get_header response "x-reason")
+  check (option string) "X-Reason header" (Some "Resource not found") (get_header response "x-reason");
+  check_cors_headers response
 
 (* Error_unauthorized レスポンステスト *)
 let test_error_unauthorized () =
   let response = Http_response.create (Error_unauthorized "Missing credentials") in
   check int "Status code" 401 (get_status response);
-  check (option string) "X-Reason header" (Some "Missing credentials") (get_header response "x-reason")
+  check (option string) "X-Reason header" (Some "Missing credentials") (get_header response "x-reason");
+  check_cors_headers response
 
 (* Error_bad_request レスポンステスト *)
 let test_error_bad_request () =
   let response = Http_response.create (Error_bad_request "Invalid input") in
   check int "Status code" 400 (get_status response);
-  check (option string) "X-Reason header" (Some "Invalid input") (get_header response "x-reason")
+  check (option string) "X-Reason header" (Some "Invalid input") (get_header response "x-reason");
+  check_cors_headers response
 
 (* Error_internal レスポンステスト *)
 let test_error_internal () =
   let response = Http_response.create (Error_internal "Database error") in
   check int "Status code" 500 (get_status response);
-  check (option string) "X-Reason header" (Some "Database error") (get_header response "x-reason")
-
-(* add_cors_headers テスト *)
-let test_add_cors_headers () =
-  let original = Response.of_string ~body:"test" `OK in
-  let with_cors = Http_response.add_cors_headers original in
-  check (option string) "CORS origin" (Some "*") (get_header with_cors "access-control-allow-origin");
-  check (option string) "CORS methods" (Some "*") (get_header with_cors "access-control-allow-methods");
-  check (option string) "CORS headers" (Some "Authorization, Content-Type, Content-Length, *") (get_header with_cors "access-control-allow-headers");
-  check (option string) "CORS expose-headers" (Some "*") (get_header with_cors "access-control-expose-headers");
-  check (option string) "CORS max-age" (Some "86400") (get_header with_cors "access-control-max-age");
-  check int "Status unchanged" 200 (get_status with_cors)
+  check (option string) "X-Reason header" (Some "Database error") (get_header response "x-reason");
+  check_cors_headers response
 
 (* descriptor_to_json テスト *)
 let test_descriptor_to_json () =
@@ -115,6 +115,5 @@ let tests = [
   test_case "Error_unauthorized response" `Quick test_error_unauthorized;
   test_case "Error_bad_request response" `Quick test_error_bad_request;
   test_case "Error_internal response" `Quick test_error_internal;
-  test_case "add_cors_headers function" `Quick test_add_cors_headers;
   test_case "descriptor_to_json function" `Quick test_descriptor_to_json;
 ]

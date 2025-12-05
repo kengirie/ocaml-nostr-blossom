@@ -25,7 +25,7 @@ let error_to_response_kind = function
   | Domain.Invalid_size s -> Http_response.Error_bad_request (Printf.sprintf "Invalid size: %d" s)
   | Domain.Invalid_hash h -> Http_response.Error_bad_request (Printf.sprintf "Invalid hash: %s" h)
 
-let request_handler ~clock ~dir ~db { Server.Handler.request; _ } =
+let request_handler ~clock ~dir ~db ~base_url { Server.Handler.request; _ } =
   Eio.traceln "Request: %s %s" (Method.to_string request.meth) request.target;
 
   (* レスポンス種別を決定 *)
@@ -109,7 +109,7 @@ let request_handler ~clock ~dir ~db { Server.Handler.request; _ } =
                      | Ok (hash, size, detected_mime_type) ->
                          Eio.traceln "Upload successful: %s (%d bytes, %s)" hash size detected_mime_type;
                          let descriptor = {
-                           Domain.url = Printf.sprintf "http://localhost:8082/%s" hash;
+                           Domain.url = Printf.sprintf "%s/%s" base_url hash;
                            sha256 = hash;
                            size = size;
                            mime_type = detected_mime_type;
@@ -121,13 +121,12 @@ let request_handler ~clock ~dir ~db { Server.Handler.request; _ } =
   | _ -> Http_response.Error_not_found "Not found"
   in
 
-  (* レスポンスを生成し、CORSヘッダーを追加 *)
+  (* レスポンスを生成（CORSヘッダーは自動的に付与される） *)
   let response = Http_response.create response_kind in
-  let response = Http_response.add_cors_headers response in
   log_response ~request response;
   response
 
-let start ~sw ~env ~port ~clock ~dir ~db ?cert ?key () =
+let start ~sw ~env ~port ~clock ~dir ~db ~base_url ?cert ?key () =
   let address = `Tcp (Eio.Net.Ipaddr.V4.loopback, port) in
 
   let https =
@@ -146,6 +145,6 @@ let start ~sw ~env ~port ~clock ~dir ~db ?cert ?key () =
       address
   in
 
-  let server = Server.create ~config (request_handler ~clock ~dir ~db) in
+  let server = Server.create ~config (request_handler ~clock ~dir ~db ~base_url) in
   let _ = Server.Command.start ~sw env server in
   ()

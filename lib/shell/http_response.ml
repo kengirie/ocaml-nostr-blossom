@@ -26,7 +26,7 @@ type response_kind =
   | Error_internal of string
     (** 500 Internal Server Error *)
 
-(** CORSヘッダーをレスポンスに追加する純粋関数
+(** CORSヘッダーのリスト
 
     @koa/cors 相当の全面適用:
     - Access-Control-Allow-Origin: *
@@ -35,26 +35,13 @@ type response_kind =
     - Access-Control-Expose-Headers: * (全ヘッダー公開)
     - Access-Control-Max-Age: 86400 (プリフライトキャッシュ24時間)
 *)
-let add_cors_headers response =
-  let headers = Response.headers response in
-  let headers =
-    headers
-    |> fun h -> Headers.remove h "access-control-allow-origin"
-    |> fun h -> Headers.remove h "access-control-allow-methods"
-    |> fun h -> Headers.remove h "access-control-allow-headers"
-    |> fun h -> Headers.remove h "access-control-expose-headers"
-    |> fun h -> Headers.remove h "access-control-max-age"
-    |> fun h -> Headers.add h "Access-Control-Allow-Origin" "*"
-    |> fun h -> Headers.add h "Access-Control-Allow-Methods" "*"
-    |> fun h -> Headers.add h "Access-Control-Allow-Headers" "Authorization, Content-Type, Content-Length, *"
-    |> fun h -> Headers.add h "Access-Control-Expose-Headers" "*"
-    |> fun h -> Headers.add h "Access-Control-Max-Age" "86400"
-  in
-  Response.create
-    ~version:response.version
-    ~headers
-    ~body:response.body
-    response.status
+let cors_headers = [
+  ("access-control-allow-origin", "*");
+  ("access-control-allow-methods", "*");
+  ("access-control-allow-headers", "Authorization, Content-Type, Content-Length, *");
+  ("access-control-expose-headers", "*");
+  ("access-control-max-age", "86400");
+]
 
 (** blob descriptorをJSON文字列に変換する純粋関数 *)
 let descriptor_to_json descriptor =
@@ -71,48 +58,44 @@ let descriptor_to_json descriptor =
 
     この関数はパターンマッチを使用してすべてのresponse_kindを網羅的に処理します。
     新しいレスポンス種別を追加した場合、コンパイラが未処理のケースを警告します。
+    全レスポンスにCORSヘッダーが自動的に付与されます。
 *)
 let create = function
   | Success_blob { data; mime_type; size } ->
-      let headers = Headers.of_list [
-        ("Content-Type", mime_type);
-        ("Content-Length", string_of_int size);
-      ] in
+      let headers = Headers.of_list (cors_headers @ [
+        ("content-type", mime_type);
+        ("content-length", string_of_int size);
+      ]) in
       Response.create ~headers ~body:(Body.of_string data) `OK
 
   | Success_metadata { mime_type; size } ->
-      let headers = Headers.of_list [
-        ("Content-Type", mime_type);
-        ("Content-Length", string_of_int size);
-      ] in
+      let headers = Headers.of_list (cors_headers @ [
+        ("content-type", mime_type);
+        ("content-length", string_of_int size);
+      ]) in
       Response.create ~headers `OK
 
   | Success_upload descriptor ->
       let json = descriptor_to_json descriptor in
-      Response.of_string ~body:json `OK
+      let headers = Headers.of_list cors_headers in
+      Response.create ~headers ~body:(Body.of_string json) `OK
 
   | Cors_preflight ->
-      let headers = Headers.of_list [
-        ("Access-Control-Allow-Origin", "*");
-        ("Access-Control-Allow-Methods", "*");
-        ("Access-Control-Allow-Headers", "Authorization, Content-Type, Content-Length, *");
-        ("Access-Control-Expose-Headers", "*");
-        ("Access-Control-Max-Age", "86400");
-      ] in
+      let headers = Headers.of_list cors_headers in
       Response.create ~headers `No_content
 
   | Error_not_found message ->
-      let headers = Headers.of_list [("X-Reason", message)] in
-      Response.of_string ~headers ~body:message `Not_found
+      let headers = Headers.of_list (cors_headers @ [("x-reason", message)]) in
+      Response.create ~headers ~body:(Body.of_string message) `Not_found
 
   | Error_unauthorized message ->
-      let headers = Headers.of_list [("X-Reason", message)] in
-      Response.of_string ~headers ~body:message `Unauthorized
+      let headers = Headers.of_list (cors_headers @ [("x-reason", message)]) in
+      Response.create ~headers ~body:(Body.of_string message) `Unauthorized
 
   | Error_bad_request message ->
-      let headers = Headers.of_list [("X-Reason", message)] in
-      Response.of_string ~headers ~body:message `Bad_request
+      let headers = Headers.of_list (cors_headers @ [("x-reason", message)]) in
+      Response.create ~headers ~body:(Body.of_string message) `Bad_request
 
   | Error_internal message ->
-      let headers = Headers.of_list [("X-Reason", message)] in
-      Response.of_string ~headers ~body:message `Internal_server_error
+      let headers = Headers.of_list (cors_headers @ [("x-reason", message)]) in
+      Response.create ~headers ~body:(Body.of_string message) `Internal_server_error
