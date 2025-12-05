@@ -10,7 +10,9 @@ open Blossom_core
 (** レスポンスの種類を表すバリアント型 *)
 type response_kind =
   | Success_blob of { data: string; mime_type: string; size: int }
-    (** Blobデータの取得成功 *)
+    (** Blobデータの取得成功（メモリ上のデータ） *)
+  | Success_blob_stream of { body: Body.t; mime_type: string; size: int }
+    (** Blobデータの取得成功（ストリーミング） *)
   | Success_metadata of { mime_type: string; size: int }
     (** Blobメタデータの取得成功（HEADリクエスト用） *)
   | Success_upload of Domain.blob_descriptor
@@ -67,6 +69,13 @@ let create = function
         ("content-length", string_of_int size);
       ]) in
       Response.create ~headers ~body:(Body.of_string data) `OK
+
+  | Success_blob_stream { body; mime_type; size } ->
+      let headers = Headers.of_list (cors_headers @ [
+        ("content-type", mime_type);
+        ("content-length", string_of_int size);
+      ]) in
+      Response.create ~headers ~body `OK
 
   | Success_metadata { mime_type; size } ->
       let headers = Headers.of_list (cors_headers @ [

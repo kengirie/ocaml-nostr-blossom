@@ -80,8 +80,8 @@ let save_stream ~dir ~db ~body ~mime_type ~uploader =
         (try Eio.Path.unlink temp_path with _ -> ());
         Error (Domain.Storage_error (Printexc.to_string exn)))
 
+(* ファイル全体をメモリに読み込む（小さいファイル向け、後方互換性のため残す） *)
 let get ~dir ~db ~sha256 =
-  (* まずDBからメタデータを取得 *)
   match Blossom_db.get db ~sha256 with
   | Ok metadata ->
       let path = Eio.Path.(dir / sha256) in
@@ -94,8 +94,7 @@ let get ~dir ~db ~sha256 =
       | exn ->
           Error (Domain.Storage_error (Printexc.to_string exn)))
   | Error (Domain.Blob_not_found _) ->
-      (* DBになくてもファイルがあれば返す（後方互換性のため、あるいは復旧用）
-         ただし、MIMEタイプは不明になる *)
+      (* DBになくてもファイルがあれば返す（後方互換性のため、あるいは復旧用） *)
       let path = Eio.Path.(dir / sha256) in
       (try
         let data = Eio.Path.load path in
@@ -103,9 +102,84 @@ let get ~dir ~db ~sha256 =
           Domain.sha256 = sha256;
           size = String.length data;
           mime_type = "application/octet-stream";
-          uploaded = 0L; (* Unknown *)
+          uploaded = 0L;
           url = "/";
         })
+      with
+      | Eio.Io (Eio.Fs.E (Eio.Fs.Not_found _), _) ->
+          Error (Domain.Blob_not_found sha256)
+      | exn ->
+          Error (Domain.Storage_error (Printexc.to_string exn)))
+  | Error e -> Error e
+
+(* ストリーミングでファイルを取得（Eio + Piaf.Body.of_string_stream を使用） *)
+let get_stream ~sw ~dir ~db ~sha256 =
+  let chunk_size = 16384 in (* 16KB chunks *)
+
+  let create_stream_body path size =
+    let stream, push = Piaf.Stream.create 2 in
+    (* 別ファイバーでファイルを読み込みながらストリームにプッシュ *)
+    Eio.Fiber.fork ~sw (fun () ->
+      Eio.Path.with_open_in path (fun file ->
+        let rec read_loop remaining =
+          if remaining <= 0 then
+            push None (* ストリーム終了 *)
+          else
+            let to_read = min chunk_size remaining in
+            let buf = Cstruct.create to_read in
+            match Eio.Flow.single_read file buf with
+            | 0 -> push None
+            | n ->
+                push (Some (Cstruct.to_string ~len:n buf));
+                read_loop (remaining - n)
+        in
+        read_loop size
+      )
+    );
+    Piaf.Body.of_string_stream ~length:(`Fixed (Int64.of_int size)) stream
+  in
+
+  match Blossom_db.get db ~sha256 with
+  | Ok metadata ->
+      let path = Eio.Path.(dir / sha256) in
+      (try
+        let body = create_stream_body path metadata.size in
+        Ok (body, metadata)
+      with
+      | Eio.Io (Eio.Fs.E (Eio.Fs.Not_found _), _) ->
+          Error (Domain.Blob_not_found sha256)
+      | exn ->
+          Error (Domain.Storage_error (Printexc.to_string exn)))
+  | Error (Domain.Blob_not_found _) ->
+      (* DBにない場合もファイルがあればストリーミングで返す *)
+      let path = Eio.Path.(dir / sha256) in
+      (try
+        let stat = Eio.Path.stat ~follow:true path in
+        let size = Optint.Int63.to_int stat.size in
+        let body = create_stream_body path size in
+        Ok (body, {
+          Domain.sha256 = sha256;
+          size;
+          mime_type = "application/octet-stream";
+          uploaded = 0L;
+          url = "/";
+        })
+      with
+      | Eio.Io (Eio.Fs.E (Eio.Fs.Not_found _), _) ->
+          Error (Domain.Blob_not_found sha256)
+      | exn ->
+          Error (Domain.Storage_error (Printexc.to_string exn)))
+  | Error e -> Error e
+
+(* メタデータのみ取得（HEADリクエスト用） *)
+let get_metadata ~dir ~db ~sha256 =
+  match Blossom_db.get db ~sha256 with
+  | Ok metadata ->
+      (* ファイルの存在確認のみ（読み込まない） *)
+      let path = Eio.Path.(dir / sha256) in
+      (try
+        let _ = Eio.Path.stat ~follow:true path in
+        Ok metadata
       with
       | Eio.Io (Eio.Fs.E (Eio.Fs.Not_found _), _) ->
           Error (Domain.Blob_not_found sha256)
@@ -116,6 +190,6 @@ let get ~dir ~db ~sha256 =
 let exists ~dir ~sha256 =
   let path = Eio.Path.(dir / sha256) in
   try
-    let _ = Eio.Path.load path in
+    let _ = Eio.Path.stat ~follow:true path in
     true
   with _ -> false

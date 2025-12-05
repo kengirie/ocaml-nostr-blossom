@@ -25,7 +25,7 @@ let error_to_response_kind = function
   | Domain.Invalid_size s -> Http_response.Error_bad_request (Printf.sprintf "Invalid size: %d" s)
   | Domain.Invalid_hash h -> Http_response.Error_bad_request (Printf.sprintf "Invalid hash: %s" h)
 
-let request_handler ~clock ~dir ~db ~base_url { Server.Handler.request; _ } =
+let request_handler ~sw ~clock ~dir ~db ~base_url { Server.Handler.request; _ } =
   Eio.traceln "Request: %s %s" (Method.to_string request.meth) request.target;
 
   (* レスポンス種別を決定 *)
@@ -42,10 +42,10 @@ let request_handler ~clock ~dir ~db ~base_url { Server.Handler.request; _ } =
            if not (Integrity.validate_hash hash) then
              Http_response.Error_not_found "Invalid path or hash"
            else
-             (match Local_storage.get ~dir ~db ~sha256:hash with
-              | Ok (data, metadata) ->
-                  Http_response.Success_blob {
-                    data;
+             (match Local_storage.get_stream ~sw ~dir ~db ~sha256:hash with
+              | Ok (body, metadata) ->
+                  Http_response.Success_blob_stream {
+                    body;
                     mime_type = metadata.mime_type;
                     size = metadata.size;
                   }
@@ -60,8 +60,8 @@ let request_handler ~clock ~dir ~db ~base_url { Server.Handler.request; _ } =
            if not (Integrity.validate_hash hash) then
              Http_response.Error_not_found "Invalid path or hash"
            else
-             (match Local_storage.get ~dir ~db ~sha256:hash with
-              | Ok (_, metadata) ->
+             (match Local_storage.get_metadata ~dir ~db ~sha256:hash with
+              | Ok metadata ->
                   Http_response.Success_metadata {
                     mime_type = metadata.mime_type;
                     size = metadata.size;
@@ -145,6 +145,6 @@ let start ~sw ~env ~port ~clock ~dir ~db ~base_url ?cert ?key () =
       address
   in
 
-  let server = Server.create ~config (request_handler ~clock ~dir ~db ~base_url) in
+  let server = Server.create ~config (request_handler ~sw ~clock ~dir ~db ~base_url) in
   let _ = Server.Command.start ~sw env server in
   ()
