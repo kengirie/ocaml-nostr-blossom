@@ -1,6 +1,9 @@
 open Piaf
 open Blossom_core
 
+(** Blob_serviceのインスタンス化 *)
+module BlobService = Blob_service.Make(Storage_eio.Impl)(Blossom_db.Impl)
+
 (** ログ出力（副作用） *)
 let log_response ~request response =
   let status = Response.status response |> Piaf.Status.to_string in
@@ -42,7 +45,7 @@ let request_handler ~sw ~clock ~dir ~db ~base_url { Server.Handler.request; _ } 
            if not (Integrity.validate_hash hash) then
              Http_response.Error_not_found "Invalid path or hash"
            else
-             (match Local_storage.get_stream ~sw ~dir ~db ~sha256:hash with
+             (match BlobService.get ~sw ~storage:dir ~db ~sha256:hash with
               | Ok (body, metadata) ->
                   Http_response.Success_blob_stream {
                     body;
@@ -60,7 +63,7 @@ let request_handler ~sw ~clock ~dir ~db ~base_url { Server.Handler.request; _ } 
            if not (Integrity.validate_hash hash) then
              Http_response.Error_not_found "Invalid path or hash"
            else
-             (match Local_storage.get_metadata ~dir ~db ~sha256:hash with
+             (match BlobService.get_metadata ~storage:dir ~db ~sha256:hash with
               | Ok metadata ->
                   Http_response.Success_metadata {
                     mime_type = metadata.mime_type;
@@ -98,7 +101,7 @@ let request_handler ~sw ~clock ~dir ~db ~base_url { Server.Handler.request; _ } 
                (match Policy.check_upload_policy ~policy ~size:content_length ~mime:mime_type with
                 | Error e -> error_to_response_kind e
                 | Ok () ->
-                    (match Local_storage.save_stream ~dir ~db ~body:request.body ~mime_type ~uploader:pubkey with
+                    (match BlobService.save ~storage:dir ~db ~body:request.body ~mime_type ~uploader:pubkey with
                      | Error e ->
                          let msg = match e with
                            | Domain.Storage_error m -> m

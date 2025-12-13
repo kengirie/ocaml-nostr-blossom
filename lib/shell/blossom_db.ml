@@ -98,3 +98,10 @@ let get (pool : t) ~sha256 =
       }
   | Ok None -> Error (Domain.Blob_not_found sha256)
   | Error e -> Error (Domain.Storage_error (Caqti_error.show e))
+
+(** Db_intf.S を満たすモジュール *)
+module Impl : Db_intf.S with type t = t = struct
+  type nonrec t = t
+  let save = save
+  let get = get
+end
